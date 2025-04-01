@@ -296,7 +296,7 @@ document.addEventListener('keydown', function(e) {
   if (gameOver) return;
 
   // left and right arrow keys (move)
-  if (e.which === 37 || e.which === 39) {
+  if (e.which === 49 || e.which === 51) {
     const col = e.which === 37
       ? tetromino.col - 1
       : tetromino.col + 1;
@@ -307,7 +307,7 @@ document.addEventListener('keydown', function(e) {
   }
 
   // up arrow key (rotate)
-  if (e.which === 38) {
+  if (e.which === 53) {
     const matrix = rotate(tetromino.matrix);
     if (isValidMove(matrix, tetromino.row, tetromino.col)) {
       tetromino.matrix = matrix;
@@ -315,7 +315,7 @@ document.addEventListener('keydown', function(e) {
   }
 
   // down arrow key (drop)
-  if(e.which === 40) {
+  if(e.which === 50) {
     const row = tetromino.row + 1;
 
     if (!isValidMove(tetromino.matrix, row, tetromino.col)) {
