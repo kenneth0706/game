@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>貪吃蛇</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        canvas {
+            background-color: #000;
+            display: block;
+            margin: 0 auto;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+        }
+        header h1 {
+            margin: 0;
+        }
+        #homeButton {
+            font-size: 18px;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #homeButton:hover {
+            background-color: #45a049;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .controls button {
+            font-size: 20px;
+            padding: 10px;
+            margin: 5px;
+            width: 50px;
+            height: 50px;
+        }
+        #score {
+            font-size: 20px;
+            color: rgb(0, 0, 0);
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>貪吃蛇</h1>
+        <button id="homeButton" onclick="goToHomePage()">回到主頁</button>
+    </header>
+
+    <div id="score">分數: 0</div>
+    <canvas id="snakeCanvas" width="600" height="600"></canvas>
+
+    <div class="controls">
+        <button onclick="changeDirection('UP')">⬆️</button>
+        <div>
+            <button onclick="changeDirection('LEFT')">⬅️</button>
+            <button onclick="changeDirection('RIGHT')">➡️</button>
+        </div>
+        <button onclick="changeDirection('DOWN')">⬇️</button>
+    </div>
+
+    <footer>
+        <p>© 2025 東東遊戲中心</p>
+    </footer>
+
+    <script>
+        const canvas = document.getElementById('snakeCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+
+        const gridSize = 20;
+        let snake = [{ x: 160, y: 160 }];
+        let direction = 'RIGHT';
+        let food = { x: 0, y: 0 };
+        let score = 0;
+        let speed = 200;
+        let gameInterval;
+
+        function generateFood() {
+            food.x = Math.floor(Math.random() * (canvas.width / gridSize)) * gridSize;
+            food.y = Math.floor(Math.random() * (canvas.height / gridSize)) * gridSize;
+        }
+
+        function drawSnake() {
+            ctx.fillStyle = 'lime';
+            snake.forEach(segment => {
+                ctx.fillRect(segment.x, segment.y, gridSize, gridSize);
+            });
+        }
+
+        function drawFood() {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(food.x, food.y, gridSize, gridSize);
+        }
+
+        function updateSnake() {
+            const head = { ...snake[0] };
+
+            if (direction === 'UP') head.y -= gridSize;
+            if (direction === 'DOWN') head.y += gridSize;
+            if (direction === 'LEFT') head.x -= gridSize;
+            if (direction === 'RIGHT') head.x += gridSize;
+
+            snake.unshift(head);
+
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreDisplay.textContent = `分數: ${score}`;
+                generateFood();
+                speed = Math.max(50, speed - 10);
+                restartGameLoop();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function checkCollision() {
+            const head = snake[0];
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+                alert("遊戲結束！得分：" + score);
+                resetGame();
+            }
+            for (let i = 1; i < snake.length; i++) {
+                if (snake[i].x === head.x && snake[i].y === head.y) {
+                    alert("遊戲結束！得分：" + score);
+                    resetGame();
+                }
+            }
+        }
+
+        function resetGame() {
+            snake = [{ x: 160, y: 160 }];
+            direction = 'RIGHT';
+            score = 0;
+            speed = 200;
+            scoreDisplay.textContent = "分數: 0";
+            generateFood();
+            restartGameLoop();
+        }
+
+        function changeDirection(newDirection) {
+            if (newDirection === 'UP' && direction !== 'DOWN') direction = 'UP';
+            if (newDirection === 'DOWN' && direction !== 'UP') direction = 'DOWN';
+            if (newDirection === 'LEFT' && direction !== 'RIGHT') direction = 'LEFT';
+            if (newDirection === 'RIGHT' && direction !== 'LEFT') direction = 'RIGHT';
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === '5') changeDirection('UP');
+            if (e.key === 'ArrowDown' || e.key === '2') changeDirection('DOWN');
+            if (e.key === 'ArrowLeft' || e.key === '1') changeDirection('LEFT');
+            if (e.key === 'ArrowRight' || e.key === '3') changeDirection('RIGHT');
+        });
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateSnake();
+            drawSnake();
+            drawFood();
+            checkCollision();
+        }
+
+        function restartGameLoop() {
+            clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, speed);
+        }
+
+        function goToHomePage() {
+            window.location.href = "index.html";  // 這裡的 "index.html" 可以修改為你的主頁地址
+        }
+
+        generateFood();
+        restartGameLoop();
+    </script>
+</body>
+</html>
