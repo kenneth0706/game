@@ -377,9 +377,9 @@
             
             <div class="mobile-controls">
                 <div class="direction-buttons">
-                    <button class="direction-btn" onclick="moveLeft()">← 左移</button>
-                    <button class="direction-btn" onclick="moveRight()">→ 右移</button>
-                    <button class="direction-btn" onclick="launchBall()" style="background-color: #f44336;">發球</button>
+                    <button class="direction-btn" id="leftBtn">← 左移</button>
+                    <button class="direction-btn" id="rightBtn">→ 右移</button>
+                    <button class="direction-btn" id="launchBtn" style="background-color: #f44336;">發球</button>
                 </div>
             </div>
         </div>
@@ -496,6 +496,13 @@
             BONUS: 6
         };
         
+        const POWERUP_TYPES = {
+            EXTRA_BALL: 'extra_ball',
+            LARGE_PADDLE: 'large_paddle',
+            FIRE_BALL: 'fire_ball',
+            STICKY_PADDLE: 'sticky_paddle'
+        };
+        
         // 遊戲變數
         let canvas, ctx;
         let ball = {
@@ -543,19 +550,37 @@
         let powerups = [];
         let activePowerups = [];
         let particles = [];
+        let totalBricksDestroyed = 0;
         
         // 初始化遊戲
         function init() {
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
             
-            // 重置遊戲狀態
-            resetGame();
-            
             // 設置事件監聽器
             setupEventListeners();
             
+            // 開始新遊戲
+            startNewGame();
+        }
+        
+        // 開始新遊戲
+        function startNewGame() {
+            // 重置遊戲狀態
+            resetGame();
+            
+            // 關閉所有模態框
+            document.getElementById('helpModal').style.display = 'none';
+            document.getElementById('gameOverModal').style.display = 'none';
+            document.getElementById('levelUpModal').style.display = 'none';
+            
+            // 獲取選擇的難度
+            difficulty = document.getElementById('difficulty').value;
+            
             // 開始遊戲循環
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
             lastTime = performance.now();
             gameLoop(lastTime);
         }
@@ -590,12 +615,75 @@
             // 初始化磚塊
             createBricks();
             
-            // 更新顯示
-            updateScoreDisplay();
-            
-            // 重置遊戲狀態
+            // 重置其他變數
+            score = 0;
+            lives = 3;
+            level = 1;
+            combo = 0;
+            maxCombo = 0;
             gameOver = false;
             isPaused = false;
+            powerups = [];
+            activePowerups = [];
+            particles = [];
+            totalBricksDestroyed = 0;
+            
+            // 更新顯示
+            updateScoreDisplay();
+        }
+        
+        // 下一關
+        function nextLevel() {
+            level++;
+            document.getElementById('level').textContent = level;
+            
+            // 給予關卡獎勵
+            const levelBonus = level * 1000;
+            addScore(levelBonus);
+            document.getElementById('levelBonus').textContent = levelBonus;
+            
+            // 隨機給予能力獎勵
+            const powerupTypes = Object.values(POWERUP_TYPES);
+            const randomPowerup = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+            const powerupRewardEl = document.getElementById('powerupReward');
+            
+            switch(randomPowerup) {
+                case POWERUP_TYPES.EXTRA_BALL:
+                    powerupRewardEl.textContent = '🎁 獲得能力: 雙倍球 🔶';
+                    break;
+                case POWERUP_TYPES.LARGE_PADDLE:
+                    powerupRewardEl.textContent = '🎁 獲得能力: 大擋板 🔷';
+                    break;
+                case POWERUP_TYPES.FIRE_BALL:
+                    powerupRewardEl.textContent = '🎁 獲得能力: 爆炸球 💥';
+                    break;
+                case POWERUP_TYPES.STICKY_PADDLE:
+                    powerupRewardEl.textContent = '🎁 獲得能力: 磁力擋板 🧲';
+                    break;
+            }
+            
+            // 激活能力
+            activatePowerup(randomPowerup);
+            
+            // 重置遊戲狀態
+            ball = {
+                x: canvas.width / 2,
+                y: canvas.height - 30,
+                dx: 0,
+                dy: 0,
+                radius: 8,
+                speed: getBallSpeed(),
+                active: false,
+                isFireball: false,
+                fireballEndTime: 0
+            };
+            balls = [ball];
+            
+            // 初始化磚塊
+            createBricks();
+            
+            // 關閉升級模態框
+            document.getElementById('levelUpModal').style.display = 'none';
         }
         
         // 創建磚塊布局
@@ -640,6 +728,7 @@
         
         // 設置事件監聽器
         function setupEventListeners() {
+            // 鍵盤控制
             document.addEventListener('keydown', keyDownHandler);
             document.addEventListener('keyup', keyUpHandler);
             document.addEventListener('mousemove', mouseMoveHandler);
@@ -658,6 +747,28 @@
             });
             document.getElementById('nextLevelBtn').addEventListener('click', nextLevel);
             
+            // 移動控制按鈕
+            document.getElementById('leftBtn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                leftPressed = true;
+            });
+            document.getElementById('leftBtn').addEventListener('touchend', (e) => {
+                e.preventDefault();
+                leftPressed = false;
+            });
+            document.getElementById('rightBtn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                rightPressed = true;
+            });
+            document.getElementById('rightBtn').addEventListener('touchend', (e) => {
+                e.preventDefault();
+                rightPressed = false;
+            });
+            document.getElementById('launchBtn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                launchBall();
+            });
+            
             // 點擊模態框外部關閉
             window.addEventListener('click', (e) => {
                 if (e.target === document.getElementById('helpModal')) {
@@ -667,6 +778,88 @@
                     document.getElementById('gameOverModal').style.display = 'none';
                 }
             });
+        }
+        
+        // 鍵盤按下處理
+        function keyDownHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight' || e.key === '3') {
+                rightPressed = true;
+            } else if (e.key === 'Left' || e.key === 'ArrowLeft' || e.key === '1') {
+                leftPressed = true;
+            } else if (e.key === ' ' || e.key === 'Spacebar') {
+                spacePressed = true;
+                launchBall();
+            } else if (e.key === 'p' || e.key === 'P') {
+                togglePause();
+            }
+        }
+        
+        // 鍵盤釋放處理
+        function keyUpHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight' || e.key === '3') {
+                rightPressed = false;
+            } else if (e.key === 'Left' || e.key === 'ArrowLeft' || e.key === '1') {
+                leftPressed = false;
+            } else if (e.key === ' ' || e.key === 'Spacebar') {
+                spacePressed = false;
+            }
+        }
+        
+        // 滑鼠移動處理
+        function mouseMoveHandler(e) {
+            const relativeX = e.clientX - canvas.offsetLeft;
+            if (relativeX > 0 && relativeX < canvas.width) {
+                paddle.x = relativeX - paddle.width / 2;
+                
+                // 限制擋板不超出畫布
+                if (paddle.x < 0) {
+                    paddle.x = 0;
+                } else if (paddle.x + paddle.width > canvas.width) {
+                    paddle.x = canvas.width - paddle.width;
+                }
+            }
+        }
+        
+        // 發射球
+        function launchBall() {
+            // 如果有球已經在活動，不做任何事
+            if (balls.some(b => b.active)) return;
+            
+            // 如果有粘性擋板，釋放所有球
+            if (paddle.isSticky) {
+                balls.forEach(b => {
+                    if (!b.active) {
+                        b.active = true;
+                        b.dx = Math.random() * 2 - 1; // -1 到 1 之間的隨機數
+                        b.dy = -2; // 向上
+                        
+                        // 標準化方向向量
+                        const length = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+                        b.dx /= length;
+                        b.dy /= length;
+                    }
+                });
+            } else {
+                // 否則只發射主球
+                ball.active = true;
+                ball.dx = Math.random() * 2 - 1; // -1 到 1 之間的隨機數
+                ball.dy = -2; // 向上
+                
+                // 標準化方向向量
+                const length = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                ball.dx /= length;
+                ball.dy /= length;
+            }
+        }
+        
+        // 切換暫停狀態
+        function togglePause() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                document.getElementById('helpModal').style.display = 'flex';
+            } else {
+                document.getElementById('helpModal').style.display = 'none';
+            }
         }
         
         // 根據難度獲取球速
@@ -859,202 +1052,653 @@
                 ctx.closePath();
             });
         }
+       // 繪製能力道具
+function drawPowerups() {
+    powerups.forEach(pu => {
+        ctx.beginPath();
+        ctx.rect(pu.x, pu.y, pu.width, pu.height);
         
-        // 繪製能力道具
-        function drawPowerups() {
-            powerups.forEach(pu => {
-                ctx.beginPath();
-                ctx.rect(pu.x, pu.y, pu.width, pu.height);
-                
-                // 根據能力類型設置顏色
-                switch(pu.type) {
-                    case 'extra_ball':
-                        ctx.fillStyle = '#2196F3';
-                        break;
-                    case 'large_paddle':
-                        ctx.fillStyle = '#4CAF50';
-                        break;
-                    case 'fire_ball':
-                        ctx.fillStyle = '#FF5722';
-                        break;
-                    case 'sticky_paddle':
-                        ctx.fillStyle = '#9C27B0';
-                        break;
-                    default:
-                        ctx.fillStyle = '#607D8B';
-                }
-                
-                ctx.fill();
-                
-                // 添加圖標
-                ctx.fillStyle = 'white';
-                ctx.font = '16px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                
-                let icon = '';
-                switch(pu.type) {
-                    case 'extra_ball': icon = '🔶'; break;
-                    case 'large_paddle': icon = '🔷'; break;
-                    case 'fire_ball': icon = '💥'; break;
-                    case 'sticky_paddle': icon = '🧲'; break;
-                }
-                
-                ctx.fillText(icon, pu.x + pu.width / 2, pu.y + pu.height / 2);
-                ctx.closePath();
-            });
+        // 根據能力類型設置不同顏色和圖標
+        switch(pu.type) {
+            case POWERUP_TYPES.EXTRA_BALL:
+                ctx.fillStyle = '#FF5252'; // 紅色
+                break;
+            case POWERUP_TYPES.LARGE_PADDLE:
+                ctx.fillStyle = '#4CAF50'; // 綠色
+                break;
+            case POWERUP_TYPES.FIRE_BALL:
+                ctx.fillStyle = '#FF9800'; // 橙色
+                break;
+            case POWERUP_TYPES.STICKY_PADDLE:
+                ctx.fillStyle = '#2196F3'; // 藍色
+                break;
+            default:
+                ctx.fillStyle = '#9C27B0'; // 紫色
         }
         
-        // 繪製粒子效果
-        function drawParticles() {
-            particles.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fillStyle = p.color;
-                ctx.globalAlpha = p.opacity;
-                ctx.fill();
-                ctx.globalAlpha = 1;
-                ctx.closePath();
-            });
+        ctx.fill();
+        ctx.closePath();
+        
+        // 添加能力圖標
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        let icon = '';
+        switch(pu.type) {
+            case POWERUP_TYPES.EXTRA_BALL:
+                icon = '🔶';
+                break;
+            case POWERUP_TYPES.LARGE_PADDLE:
+                icon = '🔷';
+                break;
+            case POWERUP_TYPES.FIRE_BALL:
+                icon = '💥';
+                break;
+            case POWERUP_TYPES.STICKY_PADDLE:
+                icon = '🧲';
+                break;
+        }
+        
+        ctx.fillText(icon, pu.x + pu.width/2, pu.y + pu.height/2);
+    });
+}
+
+// 繪製粒子效果
+function drawParticles() {
+    particles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.closePath();
+    });
+}
+
+// 更新球的位置
+function updateBalls(deltaTime) {
+    const timeFactor = deltaTime / 16; // 標準化時間因子
+    
+    balls.forEach(b => {
+        if (!b.active) {
+            // 如果球未激活，跟隨擋板移動
+            b.x = paddle.x + paddle.width / 2;
+            b.y = canvas.height - paddle.height - b.radius;
+            return;
         }
         
         // 更新球的位置
-        function updateBalls(deltaTime) {
-            balls.forEach(b => {
-                if (!b.active) return;
-                
-                // 更新位置
-                b.x += b.dx * b.speed * (deltaTime / 16);
-                b.y += b.dy * b.speed * (deltaTime / 16);
-                
-                // 檢查火球狀態是否結束
-                if (b.isFireball && performance.now() > b.fireballEndTime) {
-                    b.isFireball = false;
-                }
-                
-                // 邊界碰撞檢測
-                if (b.x + b.dx > canvas.width - b.radius || b.x + b.dx < b.radius) {
-                    b.dx = -b.dx;
-                }
-                
-                if (b.y + b.dy < b.radius) {
-                    b.dy = -b.dy;
-                }
-            });
+        b.x += b.dx * b.speed * timeFactor;
+        b.y += b.dy * b.speed * timeFactor;
+        
+        // 邊界碰撞檢測
+        if (b.x + b.dx > canvas.width - b.radius || b.x + b.dx < b.radius) {
+            b.dx = -b.dx;
         }
         
-        // 更新擋板位置
-        function updatePaddle() {
-            const width = paddle.isLarge ? paddle.width * 1.5 : paddle.width;
-            
-            if (rightPressed && paddle.x < canvas.width - width) {
-                paddle.x += paddle.speed;
-            } else if (leftPressed && paddle.x > 0) {
-                paddle.x -= paddle.speed;
-            }
-            
-            // 檢查大擋板狀態是否結束
-            if (paddle.isLarge && performance.now() > paddle.largeEndTime) {
-                paddle.isLarge = false;
-            }
+        // 頂部碰撞
+        if (b.y + b.dy < b.radius) {
+            b.dy = -b.dy;
         }
         
-        // 更新能力道具位置
-        function updatePowerups(deltaTime) {
-            for (let i = powerups.length - 1; i >= 0; i--) {
-                const pu = powerups[i];
-                pu.y += 2 * (deltaTime / 16);
+        // 底部碰撞 - 失去生命
+        if (b.y + b.dy > canvas.height - b.radius) {
+            // 如果有其他球在活動，只移除這個球
+            if (balls.length > 1) {
+                balls = balls.filter(ball => ball !== b);
+            } else {
+                // 這是最後一個球
+                lives--;
+                document.getElementById('lives').textContent = lives;
                 
-                // 檢查是否碰到擋板
-                const width = paddle.isLarge ? paddle.width * 1.5 : paddle.width;
-                const paddleX = paddle.isLarge ? paddle.x - (width - paddle.width) / 2 : paddle.x;
-                
-                if (
-                    pu.y + pu.height >= canvas.height - paddle.height &&
-                    pu.x + pu.width >= paddleX &&
-                    pu.x <= paddleX + width
-                ) {
-                    // 獲得能力
-                    activatePowerup(pu.type);
-                    powerups.splice(i, 1);
-                    
-                    // 添加粒子效果
-                    createParticles(pu.x + pu.width / 2, pu.y + pu.height / 2, 10, pu.color);
-                } else if (pu.y > canvas.height) {
-                    // 移除超出屏幕的能力
-                    powerups.splice(i, 1);
-                }
-            }
-        }
-        
-        // 更新粒子效果
-        function updateParticles(deltaTime) {
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                
-                // 更新位置和屬性
-                p.x += p.vx * (deltaTime / 16);
-                p.y += p.vy * (deltaTime / 16);
-                p.radius -= 0.1 * (deltaTime / 16);
-                p.opacity -= 0.02 * (deltaTime / 16);
-                
-                // 移除不可見的粒子
-                if (p.radius <= 0 || p.opacity <= 0) {
-                    particles.splice(i, 1);
-                }
-            }
-        }
-        
-        // 碰撞檢測
-        function collisionDetection() {
-            balls.forEach(b => {
-                if (!b.active) return;
-                
-                // 檢查是否碰到擋板
-                const width = paddle.isLarge ? paddle.width * 1.5 : paddle.width;
-                const paddleX = paddle.isLarge ? paddle.x - (width - paddle.width) / 2 : paddle.x;
-                
-                if (
-                    b.y + b.radius >= canvas.height - paddle.height &&
-                    b.x + b.radius >= paddleX &&
-                    b.x - b.radius <= paddleX + width
-                ) {
-                    // 計算反彈角度 (根據擊中擋板的位置)
-                    const hitPos = (b.x - paddleX) / width;
-                    const angle = hitPos * Math.PI - Math.PI / 2; // -90° 到 90°
-                    
-                    // 設置新的方向向量
-                    b.dx = Math.sin(angle);
-                    b.dy = -Math.cos(angle);
-                    
-                    // 標準化向量 (保持速度不變)
-                    const length = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
-                    b.dx /= length;
-                    b.dy /= length;
-                    
-                    // 如果是粘性擋板，吸附球
-                    if (paddle.isSticky && !spacePressed) {
-                        b.active = false;
-                        b.x = paddleX + width / 2;
-                        b.y = canvas.height - paddle.height - b.radius;
-                    }
-                    
-                    // 添加粒子效果
-                    createParticles(b.x, b.y, 5, '#FFFFFF');
-                }
-                
-                // 檢查是否掉出屏幕底部
-                if (b.y + b.radius > canvas.height) {
+                if (lives <= 0) {
+                    gameOver = true;
+                    showGameOver();
+                } else {
+                    // 重置球
+                    b.x = canvas.width / 2;
+                    b.y = canvas.height - 30;
+                    b.dx = 0;
+                    b.dy = 0;
                     b.active = false;
+                    b.speed = getBallSpeed();
                     
-                    // 檢查是否還有其他活動的球
-                    const activeBalls = balls.filter(ball => ball.active);
-                    if (activeBalls.length === 0) {
-                        loseLife();
-                    }
-                    
-                    return;
+                    // 重置擋板位置
+                    paddle.x = (canvas.width - paddle.width) / 2;
                 }
-                </script>
-</body>
-</html>
+            }
+        }
+        
+        // 擋板碰撞檢測
+        const paddleWidth = paddle.isLarge ? paddle.width * 1.5 : paddle.width;
+        const paddleX = paddle.isLarge ? paddle.x - (paddleWidth - paddle.width) / 2 : paddle.x;
+        
+        if (
+            b.y + b.dy > canvas.height - paddle.height - b.radius &&
+            b.x > paddleX && 
+            b.x < paddleX + paddleWidth
+        ) {
+            // 計算碰撞點（-0.5到0.5之間的值）
+            const hitPos = (b.x - (paddleX + paddleWidth / 2)) / (paddleWidth / 2);
+            
+            // 根據碰撞點改變球的角度
+            const angle = hitPos * Math.PI / 3; // 最大60度角
+            b.dx = Math.sin(angle);
+            b.dy = -Math.cos(angle);
+            
+            // 標準化方向向量
+            const length = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+            b.dx /= length;
+            b.dy /= length;
+            
+            // 如果是粘性擋板，吸附球
+            if (paddle.isSticky && !b.active) {
+                b.active = false;
+            }
+            
+            // 播放聲音效果
+            playSound('paddle');
+        }
+    });
+}
+
+// 更新擋板位置
+function updatePaddle() {
+    if (rightPressed && paddle.x < canvas.width - paddle.width) {
+        paddle.x += paddle.speed;
+    } else if (leftPressed && paddle.x > 0) {
+        paddle.x -= paddle.speed;
+    }
+    
+    // 檢查大擋板時間是否結束
+    if (paddle.isLarge && Date.now() > paddle.largeEndTime) {
+        paddle.isLarge = false;
+    }
+}
+
+// 更新能力道具
+function updatePowerups(deltaTime) {
+    const timeFactor = deltaTime / 16; // 標準化時間因子
+    
+    // 更新能力道具位置
+    powerups.forEach(pu => {
+        pu.y += pu.speed * timeFactor;
+    });
+    
+    // 移除超出屏幕的能力道具
+    powerups = powerups.filter(pu => pu.y < canvas.height);
+    
+    // 檢查能力道具與擋板的碰撞
+    powerups.forEach((pu, index) => {
+        const paddleWidth = paddle.isLarge ? paddle.width * 1.5 : paddle.width;
+        const paddleX = paddle.isLarge ? paddle.x - (paddleWidth - paddle.width) / 2 : paddle.x;
+        
+        if (
+            pu.y + pu.height > canvas.height - paddle.height &&
+            pu.x + pu.width > paddleX && 
+            pu.x < paddleX + paddleWidth
+        ) {
+            // 激活能力
+            activatePowerup(pu.type);
+            
+            // 移除能力道具
+            powerups.splice(index, 1);
+            
+            // 播放聲音效果
+            playSound('powerup');
+        }
+    });
+    
+    // 檢查激活的能力是否過期
+    activePowerups.forEach((pu, index) => {
+        if (Date.now() > pu.endTime) {
+            // 能力失效
+            deactivatePowerup(pu.type);
+            activePowerups.splice(index, 1);
+        }
+    });
+    
+    // 檢查火球是否過期
+    balls.forEach(b => {
+        if (b.isFireball && Date.now() > b.fireballEndTime) {
+            b.isFireball = false;
+        }
+    });
+}
+
+// 更新粒子效果
+function updateParticles(deltaTime) {
+    const timeFactor = deltaTime / 16; // 標準化時間因子
+    
+    particles.forEach(p => {
+        p.x += p.dx * timeFactor;
+        p.y += p.dy * timeFactor;
+        p.alpha -= 0.01 * timeFactor;
+        p.radius -= 0.1 * timeFactor;
+    });
+    
+    // 移除不可見的粒子
+    particles = particles.filter(p => p.alpha > 0 && p.radius > 0);
+}
+
+// 碰撞檢測
+function collisionDetection() {
+    for (let c = 0; c < bricks.length; c++) {
+        for (let r = 0; r < bricks[c].length; r++) {
+            const brick = bricks[c][r];
+            
+            if (brick.status === 1) {
+                balls.forEach(b => {
+                    if (!b.active) return;
+                    
+                    // 簡單的矩形與圓形碰撞檢測
+                    if (
+                        b.x + b.radius > brick.x &&
+                        b.x - b.radius < brick.x + brickWidth &&
+                        b.y + b.radius > brick.y &&
+                        b.y - b.radius < brick.y + brickHeight
+                    ) {
+                        // 更精確的碰撞檢測
+                        let testX = b.x;
+                        let testY = b.y;
+                        
+                        // 找出圓上最近的點
+                        if (b.x < brick.x) testX = brick.x; // 左邊
+                        else if (b.x > brick.x + brickWidth) testX = brick.x + brickWidth; // 右邊
+                        
+                        if (b.y < brick.y) testY = brick.y; // 頂部
+                        else if (b.y > brick.y + brickHeight) testY = brick.y + brickHeight; // 底部
+                        
+                        // 計算距離
+                        const distX = b.x - testX;
+                        const distY = b.y - testY;
+                        const distance = Math.sqrt(distX * distX + distY * distY);
+                        
+                        if (distance <= b.radius) {
+                            // 碰撞發生
+                            handleBrickCollision(b, brick, c, r, distX, distY, distance);
+                        }
+                    }
+                });
+            }
+        }
+    }
+}
+
+// 處理磚塊碰撞
+function handleBrickCollision(ball, brick, col, row, distX, distY, distance) {
+    // 不可破壞的磚塊只反彈球
+    if (brick.type === BRICK_TYPES.UNBREAKABLE) {
+        // 計算反彈角度
+        const nx = distX / distance;
+        const ny = distY / distance;
+        
+        // 計算反射向量
+        const dot = ball.dx * nx + ball.dy * ny;
+        ball.dx = ball.dx - 2 * dot * nx;
+        ball.dy = ball.dy - 2 * dot * ny;
+        
+        // 播放聲音效果
+        playSound('bounce');
+        return;
+    }
+    
+    // 減少磚塊耐久度
+    brick.hits--;
+    
+    // 增加連擊
+    combo++;
+    document.getElementById('combo').textContent = combo;
+    maxCombo = Math.max(maxCombo, combo);
+    
+    // 重置連擊計時器
+    clearTimeout(comboTimeout);
+    comboTimeout = setTimeout(() => {
+        combo = 0;
+        document.getElementById('combo').textContent = combo;
+    }, 3000);
+    
+    // 顯示連擊效果
+    if (combo >= 3) {
+        showComboEffect(ball.x, ball.y, combo);
+    }
+    
+    // 檢查磚塊是否被摧毀
+    if (brick.hits <= 0) {
+        brick.status = 0;
+        totalBricksDestroyed++;
+        
+        // 根據磚塊類型給予分數
+        let points = 10 * level; // 基礎分數
+        
+        switch(brick.type) {
+            case BRICK_TYPES.HARD:
+                points = 30 * level;
+                break;
+            case BRICK_TYPES.SPEED_UP:
+                points = 20 * level;
+                // 球速增加
+                ball.speed *= 1.1;
+                break;
+            case BRICK_TYPES.POWER_UP:
+                points = 50 * level;
+                // 掉落能力道具
+                createPowerup(brick.x + brickWidth/2, brick.y + brickHeight/2);
+                break;
+            case BRICK_TYPES.BONUS:
+                points = 100 * level;
+                break;
+        }
+        
+        // 連擊獎勵
+        if (combo >= 3) {
+            points *= 1 + (combo * 0.1);
+        }
+        
+        // 火球獎勵
+        if (ball.isFireball) {
+            points *= 1.5;
+            
+            // 火球爆炸效果
+            createExplosion(brick.x + brickWidth/2, brick.y + brickHeight/2);
+            
+            // 摧毀周圍磚塊
+            destroyNearbyBricks(col, row);
+        }
+        
+        // 添加分數
+        addScore(Math.floor(points));
+        
+        // 創建粒子效果
+        createParticles(brick.x + brickWidth/2, brick.y + brickHeight/2, brick.type);
+        
+        // 播放聲音效果
+        playSound('break');
+    } else {
+        // 播放聲音效果
+        playSound('bounce');
+    }
+    
+    // 計算反彈角度
+    const nx = distX / distance;
+    const ny = distY / distance;
+    
+    // 計算反射向量
+    const dot = ball.dx * nx + ball.dy * ny;
+    ball.dx = ball.dx - 2 * dot * nx;
+    ball.dy = ball.dy - 2 * dot * ny;
+    
+    // 稍微增加球速
+    ball.speed *= 1.005;
+}
+
+// 摧毀附近的磚塊（火球效果）
+function destroyNearbyBricks(col, row) {
+    const radius = 2; // 影響範圍
+    
+    for (let c = Math.max(0, col - radius); c <= Math.min(bricks.length - 1, col + radius); c++) {
+        for (let r = Math.max(0, row - radius); r <= Math.min(bricks[c].length - 1, row + radius); r++) {
+            const brick = bricks[c][r];
+            
+            if (brick.status === 1 && brick.type !== BRICK_TYPES.UNBREAKABLE) {
+                // 計算距離
+                const dx = c - col;
+                const dy = r - row;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance <= radius) {
+                    brick.hits = 0;
+                    brick.status = 0;
+                    totalBricksDestroyed++;
+                    
+                    // 創建粒子效果
+                    createParticles(brick.x + brickWidth/2, brick.y + brickHeight/2, brick.type);
+                }
+            }
+        }
+    }
+}
+
+// 創建能力道具
+function createPowerup(x, y) {
+    const powerupTypes = Object.values(POWERUP_TYPES);
+    const randomType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+    
+    powerups.push({
+        x: x - 15,
+        y: y,
+        width: 30,
+        height: 30,
+        speed: 2,
+        type: randomType
+    });
+}
+
+// 激活能力
+function activatePowerup(type) {
+    switch(type) {
+        case POWERUP_TYPES.EXTRA_BALL:
+            // 創建一個新球
+            const newBall = {
+                x: paddle.x + paddle.width / 2,
+                y: canvas.height - paddle.height - ball.radius,
+                dx: 0,
+                dy: 0,
+                radius: ball.radius,
+                speed: ball.speed,
+                active: false,
+                isFireball: false
+            };
+            balls.push(newBall);
+            break;
+            
+        case POWERUP_TYPES.LARGE_PADDLE:
+            paddle.isLarge = true;
+            paddle.largeEndTime = Date.now() + 30000; // 30秒
+            break;
+            
+        case POWERUP_TYPES.FIRE_BALL:
+            // 所有球變為火球
+            balls.forEach(b => {
+                b.isFireball = true;
+                b.fireballEndTime = Date.now() + 15000; // 15秒
+            });
+            break;
+            
+        case POWERUP_TYPES.STICKY_PADDLE:
+            paddle.isSticky = true;
+            break;
+    }
+    
+    // 添加到激活能力列表
+    activePowerups.push({
+        type: type,
+        endTime: Date.now() + (type === POWERUP_TYPES.STICKY_PADDLE ? 45000 : 30000) // 45秒或30秒
+    });
+    
+    // 顯示能力獲得效果
+    showPowerupEffect(type);
+}
+
+// 取消能力
+function deactivatePowerup(type) {
+    switch(type) {
+        case POWERUP_TYPES.LARGE_PADDLE:
+            paddle.isLarge = false;
+            break;
+            
+        case POWERUP_TYPES.FIRE_BALL:
+            balls.forEach(b => {
+                b.isFireball = false;
+            });
+            break;
+            
+        case POWERUP_TYPES.STICKY_PADDLE:
+            paddle.isSticky = false;
+            break;
+    }
+}
+
+// 創建粒子效果
+function createParticles(x, y, brickType) {
+    const particleCount = brickType === BRICK_TYPES.BONUS ? 20 : 10;
+    let color;
+    
+    switch(brickType) {
+        case BRICK_TYPES.HARD:
+            color = '#9E9E9E';
+            break;
+        case BRICK_TYPES.POWER_UP:
+            color = '#9C27B0';
+            break;
+        case BRICK_TYPES.SPEED_UP:
+            color = '#FFC107';
+            break;
+        case BRICK_TYPES.BONUS:
+            color = '#FFEB3B';
+            break;
+        default:
+            color = BRICK_COLORS[Math.floor(Math.random() * BRICK_COLORS.length)];
+    }
+    
+    for (let i = 0; i < particleCount; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            radius: Math.random() * 4 + 2,
+            color: color,
+            alpha: 1,
+            dx: (Math.random() - 0.5) * 4,
+            dy: (Math.random() - 0.5) * 4
+        });
+    }
+}
+
+// 創建爆炸效果
+function createExplosion(x, y) {
+    for (let i = 0; i < 30; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            radius: Math.random() * 6 + 3,
+            color: `hsl(${Math.random() * 30 + 10}, 100%, 50%)`, // 橙紅色調
+            alpha: 1,
+            dx: (Math.random() - 0.5) * 8,
+            dy: (Math.random() - 0.5) * 8
+        });
+    }
+}
+
+// 顯示連擊效果
+function showComboEffect(x, y, combo) {
+    const comboEl = document.createElement('div');
+    comboEl.className = 'combo';
+    comboEl.textContent = `${combo} Combo!`;
+    comboEl.style.left = `${x}px`;
+    comboEl.style.top = `${y}px`;
+    document.body.appendChild(comboEl);
+    
+    // 自動移除
+    setTimeout(() => {
+        comboEl.remove();
+    }, 1000);
+}
+
+// 顯示能力獲得效果
+function showPowerupEffect(type) {
+    let text = '';
+    let color = '';
+    
+    switch(type) {
+        case POWERUP_TYPES.EXTRA_BALL:
+            text = '雙倍球!';
+            color = '#FF5252';
+            break;
+        case POWERUP_TYPES.LARGE_PADDLE:
+            text = '大擋板!';
+            color = '#4CAF50';
+            break;
+        case POWERUP_TYPES.FIRE_BALL:
+            text = '爆炸球!';
+            color = '#FF9800';
+            break;
+        case POWERUP_TYPES.STICKY_PADDLE:
+            text = '磁力擋板!';
+            color = '#2196F3';
+            break;
+    }
+    
+    const effectEl = document.createElement('div');
+    effectEl.className = 'combo';
+    effectEl.textContent = text;
+    effectEl.style.color = color;
+    effectEl.style.left = `${canvas.width / 2}px`;
+    effectEl.style.top = `${canvas.height / 2}px`;
+    effectEl.style.fontSize = '32px';
+    document.body.appendChild(effectEl);
+    
+    // 自動移除
+    setTimeout(() => {
+        effectEl.remove();
+    }, 1500);
+}
+
+// 添加分數
+function addScore(points) {
+    score += Math.floor(points);
+    updateScoreDisplay();
+    
+    // 更新最高分
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('breakoutHighScore', highScore);
+    }
+}
+
+// 更新分數顯示
+function updateScoreDisplay() {
+    document.getElementById('score').textContent = score;
+}
+
+// 檢查遊戲狀態
+function checkGameState() {
+    // 檢查是否所有磚塊都被摧毀
+    let allDestroyed = true;
+    for (let c = 0; c < bricks.length; c++) {
+        for (let r = 0; r < bricks[c].length; r++) {
+            if (bricks[c][r].status === 1 && bricks[c][r].type !== BRICK_TYPES.UNBREAKABLE) {
+                allDestroyed = false;
+                break;
+            }
+        }
+        if (!allDestroyed) break;
+    }
+    
+    if (allDestroyed) {
+        // 過關
+        document.getElementById('currentLevel').textContent = level;
+        document.getElementById('levelUpModal').style.display = 'flex';
+    }
+}
+
+// 顯示遊戲結束
+function showGameOver() {
+    document.getElementById('gameResultTitle').textContent = '遊戲結束!';
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('finalHighScore').textContent = highScore;
+    document.getElementById('finalLevel').textContent = level;
+    document.getElementById('finalBricks').textContent = totalBricksDestroyed;
+    document.getElementById('gameOverModal').style.display = 'flex';
+}
+
+// 播放聲音效果
+function playSound(type) {
+    // 這裡可以添加聲音播放代碼
+    // 實際實現需要預加載音頻文件
+}
+
+// 初始化遊戲
+window.onload = init;
