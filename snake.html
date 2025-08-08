@@ -270,7 +270,7 @@
         <canvas id="snakeCanvas" width="600" height="600"></canvas>
 
         <div class="controls">
-            <p class="controls-info desktop-controls">使用方向鍵控制 (↑ ↓ ← →) 或 WASD 鍵</p>
+            <p class="controls-info desktop-controls">使用方向鍵控制 (↑ ↓ ← →) 或 5213 鍵</p>
             
             <div class="mobile-controls">
                 <p class="controls-info">點擊按鈕控制方向</p>
@@ -302,7 +302,7 @@
             </ul>
             
             <h3>控制方式</h3>
-            <p>鍵盤: 方向鍵 (↑ ↓ ← →) 或 WASD 鍵</p>
+            <p>鍵盤: 方向鍵 (↑ ↓ ← →) 或 5213 鍵</p>
             <p>手機: 使用屏幕上的方向按鈕</p>
             
             <h3>遊戲技巧</h3>
@@ -774,10 +774,10 @@
             }
             
             // WASD 鍵控制
-            if (e.key === 'w' || e.key === 'W') changeDirection('UP');
-            if (e.key === 's' || e.key === 'S') changeDirection('DOWN');
-            if (e.key === 'a' || e.key === 'A') changeDirection('LEFT');
-            if (e.key === 'd' || e.key === 'D') changeDirection('RIGHT');
+            if (e.key === 'w' || e.key === '5') changeDirection('UP');
+            if (e.key === 's' || e.key === '2') changeDirection('DOWN');
+            if (e.key === 'a' || e.key === '1') changeDirection('LEFT');
+            if (e.key === 'd' || e.key === '3') changeDirection('RIGHT');
             
             // 方向鍵控制
             if (e.key === 'ArrowUp') changeDirection('UP');
@@ -850,3 +850,4 @@
     </script>
 </body>
 </html>
+
